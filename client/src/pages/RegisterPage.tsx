@@ -1,5 +1,6 @@
 import React, { useState, ChangeEvent, FormEvent } from "react";
 import axios from "axios";
+import { useNavigate } from "react-router-dom";
 
 interface User {
   name: string;
@@ -15,6 +16,7 @@ const RegisterPage: React.FC = () => {
   const [emailError, setEmailError] = useState("");
   const [livePasswordValidation, setLivePasswordValidation] = useState("");
   const [confirmPasswordError, setConfirmPasswordError] = useState("");
+  const navigate = useNavigate();
 
   const onNameChange = (event: ChangeEvent<HTMLInputElement>) =>
     setName(event.target.value);
@@ -70,6 +72,7 @@ const RegisterPage: React.FC = () => {
         .then((response) => {
           if (response.data.success) {
             alert("회원가입이 성공적으로 완료되었습니다.");
+            navigate("/login");
           } else {
             alert("회원가입에 실패했습니다.");
           }
