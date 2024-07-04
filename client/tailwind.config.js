@@ -7,6 +7,8 @@ module.exports = {
       colors: {
         darkBack: "#37393F",
         darkBox: "#2E3036",
+        selectBox: "#202225",
+        navbar: "#4B4D52",
       },
     },
   },

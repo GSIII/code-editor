@@ -26,6 +26,7 @@ const LoginPage: React.FC = () => {
       .then((response) => {
         if (response.data.loginSuccess) {
           setCookies("token", response.data.token, { path: "/" });
+          localStorage.setItem("name", response.data.name); // 사용자 이름을 로컬 스토리지에 저장
           alert("로그인에 성공했습니다.");
           navigate("/");
         } else {
