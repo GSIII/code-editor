@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from "react";
-import Peer from "simple-peer";
-import io from "socket.io-client";
 import axios from "axios";
 import Editor from "@monaco-editor/react";
 import { useCookies } from "react-cookie";
-
-const socket = io("http://localhost:4000");
+import { initializePeer, destroyPeer } from "./utils/peerUtils";
+import Peer from "simple-peer";
+import { FaRegCommentDots } from "react-icons/fa";
+import { CiMemoPad } from "react-icons/ci";
 
 const MonacoEditor: React.FC = () => {
   const [code, setCode] = useState<string>("");
@@ -15,59 +15,31 @@ const MonacoEditor: React.FC = () => {
     []
   );
   const [comment, setComment] = useState<string>("");
-  const [commentBoxPos, setCommentBoxPos] = useState<{
-    x: number;
-    y: number;
-  } | null>(null);
+
+  const [memos, setMemos] = useState<
+    { text: string; position: { x: number; y: number } }[]
+  >([]);
+  const [isDragging, setIsDragging] = useState<boolean>(false);
+  const [dragStartPos, setDragStartPos] = useState<{ x: number; y: number }>({
+    x: 0,
+    y: 0,
+  });
+
   const peerRef = useRef<Peer.Instance | null>(null);
   const isInitiator = window.location.hash === "#init";
   const [cookies] = useCookies(["token"]);
 
   useEffect(() => {
-    const peer = new Peer({
-      initiator: isInitiator,
-      trickle: false,
-    });
-
-    peer.on("signal", (data) => {
-      console.log("Sending signal:", data);
-      socket.emit("signal", data);
-    });
-
-    peer.on("connect", () => {
-      console.log("Peer connected");
-    });
-
-    peer.on("data", (data) => {
-      console.log("Received data:", data.toString());
-      setCode(data.toString());
-    });
-
-    peer.on("error", (err) => {
-      console.error("Peer error:", err);
-    });
-
-    peer.on("close", () => {
-      console.log("Peer connection closed");
-    });
-
-    socket.on("signal", (data) => {
-      console.log("Received signal:", data);
-      if (peerRef.current) {
-        peerRef.current.signal(data);
-      }
-    });
-
-    peerRef.current = peer;
+    peerRef.current = initializePeer(isInitiator, setCode);
 
     return () => {
-      socket.off("signal");
-      if (peerRef.current) {
-        peerRef.current.destroy();
-        peerRef.current = null;
-      }
+      destroyPeer();
     };
   }, [isInitiator]);
+
+  useEffect(() => {
+    fetchComments(); // 페이지가 처음 로드될 때 댓글 불러오기
+  }, [language]); //
 
   const fetchComments = () => {
     axios
@@ -76,6 +48,9 @@ const MonacoEditor: React.FC = () => {
           Authorization: `Bearer ${cookies.token}`, // react-cookie 사용하여 쿠키에서 토큰 가져와 헤더에 추가
         },
         withCredentials: true,
+        params: {
+          language, // 선택된 언어를 쿼리 파라미터로 보냄
+        },
       })
       .then((response) => {
         if (response.data.success) {
@@ -104,6 +79,10 @@ const MonacoEditor: React.FC = () => {
     event: React.ChangeEvent<HTMLSelectElement>
   ) => {
     setLanguage(event.target.value);
+
+    if (showComments) {
+      fetchComments(); // 언어 변경 시 댓글창이 열려 있다면 댓글 목록을 업데이트
+    }
   };
 
   const handleCommentChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -121,6 +100,7 @@ const MonacoEditor: React.FC = () => {
           {
             text: comment,
             name: userName,
+            language,
           },
           {
             withCredentials: true,
@@ -133,7 +113,7 @@ const MonacoEditor: React.FC = () => {
           if (response.data.success) {
             setComments([...comments, response.data.comment]);
             setComment("");
-            fetchComments();
+            // fetchComments();
           }
         })
         .catch((error) => {
@@ -142,38 +122,49 @@ const MonacoEditor: React.FC = () => {
     }
   };
 
-  const handleMouseUp = (event: MouseEvent) => {
-    const selection = window.getSelection()?.toString();
-    if (selection) {
-      const { clientX: x, clientY: y } = event;
-      setCommentBoxPos({ x, y });
-    }
-  };
-
-  const handleEmojiClick = () => {
+  const handleOpenComments = () => {
     setShowComments(true);
-    setCommentBoxPos(null);
+    fetchComments();
   };
 
   const handleCloseComments = () => {
     setShowComments(false);
   };
 
-  useEffect(() => {
-    document.addEventListener("mouseup", handleMouseUp);
-    return () => {
-      document.removeEventListener("mouseup", handleMouseUp);
-    };
-  }, []);
+  const handleMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
+    setIsDragging(true);
+    setDragStartPos({ x: event.clientX, y: event.clientY });
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  const handleMouseMove = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (isDragging) {
+      // 드래그 중일 때 메모 생성
+      const deltaX = event.clientX - dragStartPos.x;
+      const deltaY = event.clientY - dragStartPos.y;
+      const newPosition = {
+        x: dragStartPos.x + deltaX,
+        y: dragStartPos.y + deltaY,
+      };
+      setMemos([...memos, { text: "", position: newPosition }]);
+      setIsDragging(false); // 드래그 후 메모를 한 번만 추가하도록 설정
+    }
+  };
 
   return (
     <div
       className={`relative grid ${
         showComments ? "grid-cols-2" : "grid-cols-1"
       } min-h-screen`}
+      onMouseDown={handleMouseDown}
+      onMouseUp={handleMouseUp}
+      onMouseMove={handleMouseMove}
     >
       <div>
-        <div className="bg-selectBox">
+        <div className="flex justify-between items-center bg-selectBox p-1">
           <select
             onChange={handleLanguageChange}
             value={language}
@@ -189,6 +180,15 @@ const MonacoEditor: React.FC = () => {
             <option value="html">HTML</option>
             <option value="json">JSON</option>
           </select>
+          <button
+            onClick={handleOpenComments}
+            className="text-white p-2 rounded ml-2"
+          >
+            <FaRegCommentDots size="22" />
+          </button>
+          <button className="text-white p-2 rounded ml-2">
+            <CiMemoPad size="22" />
+          </button>
         </div>
         <Editor
           height="100vh"
@@ -199,17 +199,8 @@ const MonacoEditor: React.FC = () => {
           className="w-full h-full"
         />
       </div>
-      {commentBoxPos && (
-        <div
-          style={{ top: commentBoxPos.y, left: commentBoxPos.x }}
-          className="absolute bg-yellow-300 p-1 rounded cursor-pointer"
-          onClick={handleEmojiClick}
-        >
-          💬
-        </div>
-      )}
       {showComments && (
-        <div className="bg-gray-800 p-4 relative flex flex-col">
+        <div className="bg-darkBox p-4 relative flex flex-col">
           <div className="flex justify-between items-center mb-2">
             <h2 className="text-white text-lg">Comments</h2>
             <button onClick={handleCloseComments} className="text-white">
@@ -249,6 +240,23 @@ const MonacoEditor: React.FC = () => {
           </div>
         </div>
       )}
+      {memos.map((memo, index) => (
+        <div
+          key={index}
+          className="absolute bg-yellow-200 p-2 rounded"
+          style={{ left: memo.position.x, top: memo.position.y }}
+        >
+          <textarea
+            value={memo.text}
+            onChange={(e) => {
+              const updatedMemos = [...memos];
+              updatedMemos[index].text = e.target.value;
+              setMemos(updatedMemos);
+            }}
+            className="w-40 h-20 resize-none"
+          />
+        </div>
+      ))}
     </div>
   );
 };

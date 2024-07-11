@@ -6,7 +6,7 @@ const Navbar: React.FC = () => {
   const { isAuthenticated, logout } = useAuth();
 
   return (
-    <nav className="bg-navbar p-4">
+    <nav className="bg-darkBox p-4">
       <div className="container mx-auto flex justify-between items-center">
         <div className="text-white">Code Block</div>
         <div>

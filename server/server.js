@@ -77,11 +77,12 @@ app.post("/login", (req, res) => {
 });
 
 app.post("/comments", authMiddleware, async (req, res) => {
-  const { text } = req.body;
+  const { text, language } = req.body; // 언어 정보 추가
   const comment = new Comment({
     userId: req.user._id,
     name: req.user.name,
     text,
+    language, // 언어 정보 저장
   });
 
   try {
@@ -93,8 +94,9 @@ app.post("/comments", authMiddleware, async (req, res) => {
 });
 
 app.get("/comments", authMiddleware, async (req, res) => {
+  const { language } = req.query; // 언어 정보 쿼리에서 가져옴
   try {
-    const comments = await Comment.find({ userId: req.user._id });
+    const comments = await Comment.find({ userId: req.user._id, language });
     res.status(200).json({ success: true, comments });
   } catch (err) {
     res.status(400).json({ success: false, err });
